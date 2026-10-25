@@ -756,12 +756,25 @@ defmodule Teiserver.TachyonLobby.Lobby do
           end
         end)
 
-      if Enum.empty?(errors) do
-        final_data = process_events(fsm_data, events).data
-        {:keep_state, final_data, [{:reply, from, :ok}]}
-      else
-        message = Enum.join(errors, ", ")
-        {:keep_state, fsm_data, [{:reply, from, {:error, "Cannot update lobby: #{message}"}}]}
+      # updates are all or nothing, so we can't apply some properties right away
+      # while the rest waits for a vote
+      needs_vote? = Enum.any?(events, &match?(%Events.StartVote{}, &1))
+
+      cond do
+        not Enum.empty?(errors) ->
+          message = Enum.join(errors, ", ")
+          {:keep_state, fsm_data, [{:reply, from, {:error, "Cannot update lobby: #{message}"}}]}
+
+        needs_vote? and map_size(data) > 1 ->
+          {:keep_state, fsm_data,
+           [
+             {:reply, from,
+              {:error, "Cannot update lobby: changes requiring a vote must be sent on their own"}}
+           ]}
+
+        true ->
+          final_data = process_events(fsm_data, events).data
+          {:keep_state, final_data, [{:reply, from, :ok}]}
       end
     else
       {:keep_state, fsm_data,

@@ -1245,6 +1245,39 @@ defmodule Teiserver.TachyonLobby.LobbyTest do
       {:error, err} = Lobby.update_properties(id, "2", %{map_name: "new map"})
       assert err =~ "boss"
     end
+
+    test "update with a change requiring a vote is rejected as a whole" do
+      %{id: id} = setup_full_lobby([1, 1])
+      :ok = Lobby.join_queue(id, "2")
+      {:ok, original_details} = LobbyProcess.get_details(id)
+
+      {:error, err} =
+        Lobby.update_properties(id, @default_user_id, %{
+          map_name: "new map",
+          game_options: %{"foo" => "bar"}
+        })
+
+      assert err =~ "vote"
+      {:ok, details} = LobbyProcess.get_details(id)
+      assert details.current_vote == nil
+      assert details.map_name == original_details.map_name
+      assert details.game_options == original_details.game_options
+    end
+
+    test "map can be changed with other properties when no vote is needed" do
+      %{id: id} = setup_full_lobby([1, 1])
+
+      :ok =
+        Lobby.update_properties(id, @default_user_id, %{
+          map_name: "new map",
+          game_options: %{"foo" => "bar"}
+        })
+
+      {:ok, details} = LobbyProcess.get_details(id)
+      assert details.current_vote == nil
+      assert details.map_name == "new map"
+      assert details.game_options["foo"] == "bar"
+    end
   end
 
   describe "boss manipulation" do

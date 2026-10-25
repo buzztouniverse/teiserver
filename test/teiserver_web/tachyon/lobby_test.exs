@@ -591,6 +591,23 @@ defmodule TeiserverWeb.Tachyon.LobbyTest do
       assert last_vote["outcome"] == "passed"
       assert last_vote["vote"] == %{"type" => "changeMap", "newMapName" => "new map name"}
     end
+
+    test "update needing a vote is rejected when mixed with other changes",
+         %{client: client, lobby_id: lobby_id} do
+      {:ok, ctx2} = Tachyon.setup_client()
+      %{"status" => "success"} = Tachyon.join_lobby!(ctx2[:client], lobby_id)
+      Tachyon.lobby_join_queue!(ctx2[:client])
+      %{"commandId" => "lobby/updated"} = Tachyon.recv_message!(client)
+      %{"commandId" => "lobby/updated"} = Tachyon.recv_message!(client)
+
+      %{"status" => "failed", "reason" => "invalid_request"} =
+        Tachyon.lobby_update!(client, %{
+          mapName: "new map name",
+          gameOptions: %{"foo" => %{"value" => "bar"}}
+        })
+
+      assert {:error, :timeout} = Tachyon.recv_message(client)
+    end
   end
 
   describe "boss" do
